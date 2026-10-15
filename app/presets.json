@@ -1,0 +1,7 @@
+[
+  { "id": "crash", "label": "Crash", "spot_shock_pct": -20, "vol_shock_pct": 50 },
+  { "id": "selloff", "label": "Sell-off", "spot_shock_pct": -10, "vol_shock_pct": 25 },
+  { "id": "vol_spike", "label": "Vol spike", "spot_shock_pct": 0, "vol_shock_pct": 100 },
+  { "id": "vol_crush", "label": "Vol crush", "spot_shock_pct": 0, "vol_shock_pct": -30 },
+  { "id": "rally", "label": "Rally", "spot_shock_pct": 10, "vol_shock_pct": -20 }
+]

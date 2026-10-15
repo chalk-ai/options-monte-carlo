@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Options Monte Carlo</title>
+<style>
+  :root { --bg:#224A41; --panel:#1C3B34; --line:#32645B; --ink:#EFF5F3; --muted:#B9CFC7; --accent:#BBD96D; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:32px 16px; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,sans-serif; }
+  main { max-width:960px; margin:0 auto; display:grid; gap:20px; }
+  h1 { font-weight:500; margin:0; } .sub { color:var(--muted); margin:0; }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:16px; }
+  label { display:inline-flex; flex-direction:column; gap:4px; margin:0 12px 12px 0; font-size:12px; color:var(--muted); }
+  select, input { padding:8px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--ink); font:inherit; }
+  button { font:13px ui-monospace,Menlo,monospace; text-transform:uppercase; letter-spacing:.06em; border:0;
+           border-radius:20px; padding:9px 16px; background:var(--accent); color:var(--bg); cursor:pointer; margin:0 8px 8px 0; }
+  pre { white-space:pre-wrap; font:12px/1.5 ui-monospace,Menlo,monospace; color:var(--muted); margin:0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Options Monte Carlo</h1>
+  <p class="sub">A synthetic universe of 40 underlyings and a 2,000-position book, priced by Monte Carlo on a GPU.</p>
+  <section>
+    <label>Underlying <select id="u"></select></label>
+    <label>Kind <select id="kind">
+      <option>european_call</option><option>european_put</option><option>asian_call</option>
+      <option>asian_put</option><option>up_and_out_call</option><option>down_and_in_put</option></select></label>
+    <label>Strike % <input id="strike" type="number" value="100" min="50" max="150"></label>
+    <label>Barrier % <input id="barrier" type="number" value="130" min="0" max="300"></label>
+    <label>Months <input id="months" type="number" value="12" min="1" max="36"></label>
+    <label>Paths <select id="paths"><option>20000</option><option selected>100000</option><option>200000</option><option>1000000</option></select></label>
+    <div><button id="gpu">Price on GPU</button><button id="cpu">Price on CPU</button></div>
+    <pre id="priceOut"></pre>
+  </section>
+  <section>
+    <div id="presets"></div>
+    <pre id="stressOut"></pre>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const post = async (path, body) => {
+  const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const out = await r.json();
+  if (!r.ok) throw new Error(out.detail || r.status);
+  return out;
+};
+const priceIt = async (device) => {
+  $("priceOut").textContent = "Pricing…";
+  try {
+    const r = await post("api/price", { underlying: $("u").value, kind: $("kind").value, strike_pct: +$("strike").value,
+      barrier_pct: +$("barrier").value, expiry_months: +$("months").value, paths: +$("paths").value, device });
+    $("priceOut").textContent = `price ${r.price.toFixed(4)} ± ${r.stderr.toFixed(4)}` +
+      (r.analytic != null ? ` (Black-Scholes ${r.analytic.toFixed(4)})` : "") +
+      `\ndelta ${r.delta.toFixed(4)}  gamma ${r.gamma.toFixed(5)}  vega ${r.vega.toFixed(4)}` +
+      `\n${r.paths.toLocaleString()} paths on ${r.device}: ${r.compute_ms} ms${r.cached ? " (cached)" : ""}`;
+  } catch (e) { $("priceOut").textContent = e.message; }
+};
+$("gpu").onclick = () => priceIt("cuda");
+$("cpu").onclick = () => priceIt("cpu");
+fetch("api/universe").then((r) => r.json()).then((u) => {
+  for (const x of u.underlyings) $("u").append(new Option(`${x.underlying} · ${x.sector}`, x.underlying));
+  for (const p of u.presets) {
+    const b = document.createElement("button");
+    b.textContent = p.label;
+    b.onclick = async () => {
+      $("stressOut").textContent = "Repricing the book with one ChalkSQL query…";
+      try {
+        const s = await post("api/stress", { preset: p.id });
+        $("stressOut").textContent = `P&L ${s.total_pnl.toLocaleString()} over ${s.positions} positions · ChalkSQL ${s.sql_ms} ms\n` +
+          s.sectors.map((x) => `${x.sector}: ${x.pnl.toLocaleString()}`).join("\n") + `\n\n${s.sql}`;
+      } catch (e) { $("stressOut").textContent = e.message; }
+    };
+    $("presets").append(b);
+  }
+});
+</script>
+</body>
+</html>
