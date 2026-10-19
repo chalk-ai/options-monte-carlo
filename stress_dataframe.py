@@ -7,7 +7,7 @@
 """The book stress test as a Chalk DataFrame: shock spot and vol, reprice every position on the GPU,
 sum the P&L by sector.
 
-    CHALK_ENVIRONMENT=<env id> ./stress_dataframe.py --spot -20 --vol 50 [--app https://<app>]
+    ./stress_dataframe.py --spot -20 --vol 50 [--app https://<app>]
 """
 
 from __future__ import annotations
