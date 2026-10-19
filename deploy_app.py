@@ -20,7 +20,6 @@ import os
 import time
 from pathlib import Path
 
-from chalk_env import load_chalk_env
 
 HERE = Path(__file__).resolve().parent
 VOLUME = "options-monte-carlo-data"
@@ -30,7 +29,6 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--upload", type=Path, default=None, help="local data/ directory to upload first")
     args = parser.parse_args()
-    load_chalk_env()
     from chalkcompute import Image, ReadinessProbe, ScalingGroup, Volume
 
     service_url = ScalingGroup.from_name("option-pricer").web_url
@@ -52,9 +50,6 @@ def main() -> None:
         .add_local_file(str(HERE / "app/presets.json"), "/web/presets.json", strategy="copy")
         .workdir("/app")
     )
-    env_id = os.environ["CHALK_ENVIRONMENT_ID"]
-    # The predicted public URL of this group; ChalkSQL reads the book from it.
-    web_url = f'https://{env_id}-options-monte-carlo.staging.internal.gcp.chalk.dev'
     group = ScalingGroup(
         image=image,
         name='options-monte-carlo',
@@ -64,9 +59,6 @@ def main() -> None:
             "PORT": "8080",
             "WEB_DIR": "/web",
             "MEDIA_DIR": "/media",
-            "CHALK_API_SERVER": os.environ["CHALK_API_SERVER"],
-            "CHALK_ENVIRONMENT_ID": env_id,
-            "BOOK_PARQUET": f"{web_url}/data/book_marked.parquet",
             "PRICER_URL": service_url,
             "PRICER_TOKEN": os.environ.get("PRICER_TOKEN", ""),
         },

@@ -69,8 +69,7 @@ make_universe.py ─► data/{underlyings,book}.parquet ─► Chalk Volume "opt
 
 ## Run it
 
-Needs [uv](https://docs.astral.sh/uv/) and Chalk credentials (`chalk login`, or the
-`CHALK_CLIENT_ID` / `CHALK_CLIENT_SECRET` / `CHALK_API_SERVER` environment variables). The pricer
+Needs [uv](https://docs.astral.sh/uv/) and your existing `chalk login`. The pricer
 only answers requests that carry `PRICER_TOKEN`.
 
 ```bash
@@ -81,7 +80,7 @@ export PRICER_TOKEN=$(openssl rand -hex 16)
 ./deploy_functions.py
 ./deploy_app.py --upload data/
 ./batch.py
-CHALK_ENVIRONMENT=<env> ./stress_dataframe.py --spot -20 --vol 50
+./stress_dataframe.py --spot -20 --vol 50
 ```
 
 The query engine reads its function catalog when the environment is deployed: after the first

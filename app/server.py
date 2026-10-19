@@ -23,6 +23,7 @@ from typing import Any, Literal
 
 import httpx
 import pyarrow.parquet as pq
+from chalkcompute import ScalingGroup
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -47,7 +48,7 @@ def versioned(url: str, path: Path) -> str:
 
 
 BOOK_PATH = MEDIA / "data" / "book_marked.parquet"
-BOOK_URL = versioned(os.environ["BOOK_PARQUET"], BOOK_PATH)
+BOOK_URL = versioned(ScalingGroup.from_name("options-monte-carlo").web_url.rstrip("/") + "/data/book_marked.parquet", BOOK_PATH)
 UNDERLYINGS = (
     {r["underlying"]: r for r in pq.read_table(MEDIA / "data" / "underlyings.parquet").to_pylist()}
     if (MEDIA / "data" / "underlyings.parquet").is_file()
