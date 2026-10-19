@@ -13,9 +13,7 @@ The book parquet is served from a Chalk Volume mounted at MEDIA_DIR; ChalkSQL re
 from __future__ import annotations
 
 import asyncio
-import base64
 import hashlib
-import io
 import json
 import os
 import time
@@ -33,8 +31,6 @@ from pydantic import BaseModel, Field
 
 WEB = Path(os.environ.get("WEB_DIR", "/web"))
 MEDIA = Path(os.environ.get("MEDIA_DIR", "/media"))
-API = os.environ["CHALK_API_SERVER"].rstrip("/")
-ENV_ID = os.environ["CHALK_ENVIRONMENT_ID"]
 PRICER_URL = os.environ["PRICER_URL"].rstrip("/")
 PRICER_TOKEN = os.environ.get("PRICER_TOKEN", "")
 STRESS_PATHS = 50_000  # the marks were computed at this path count and seed: scenario P&L uses common numbers
@@ -112,23 +108,6 @@ def remember(key: str, value: dict[str, Any]) -> dict[str, Any]:
     while len(_cache) > 256:
         _cache.popitem(last=False)
     return {**value, "cached": False}
-
-
-async def token() -> str:
-    # chalk_identity=True mounts a workload JWT and rotates it in place, so it is re-read each call.
-    path = os.environ.get("CHALK_WEB_IDENTITY_TOKEN_FILE")
-    if path and Path(path).exists():
-        return Path(path).read_text().strip()
-    r = await _client.post(
-        f"{API}/v1/oauth/token",
-        json={
-            "client_id": os.environ["CHALK_CLIENT_ID"],
-            "client_secret": os.environ["CHALK_CLIENT_SECRET"],
-            "grant_type": "client_credentials",
-        },
-    )
-    r.raise_for_status()
-    return r.json()["access_token"]
 
 
 class PriceRequest(BaseModel):
@@ -241,20 +220,17 @@ async def stress(req: StressRequest) -> JSONResponse:
     )
     async with _sql_slots:
         t0 = time.perf_counter()
-        r = await _client.post(
-            f"{API}/chalk.protosql.v1.SqlService/ExecuteSqlQuery",
-            headers={
-                "Authorization": f"Bearer {await token()}",
-                "X-Chalk-Env-Id": ENV_ID,
-                "x-chalk-deployment-type": "engine-grpc",
-            },
-            json={"query": sql, "syncOptions": {}},
-        )
+        from chalkcompute import SQLError, SQLClient
+
+        def query_rows() -> list[dict[str, Any]]:
+            with SQLClient() as client:
+                return client.query(sql, timeout=300).to_arrow().to_pylist()
+
+        try:
+            rows = await asyncio.to_thread(query_rows)
+        except SQLError as exc:
+            raise HTTPException(502, f"ChalkSQL error: {str(exc)[:300]}") from exc
         sql_ms = (time.perf_counter() - t0) * 1000
-    body = r.json()
-    if "parquet" not in body:
-        raise HTTPException(502, f"ChalkSQL error: {json.dumps(body.get('errors', body))[:300]}")
-    rows = pq.read_table(io.BytesIO(base64.b64decode(body["parquet"]))).to_pylist()
     sectors = sorted({(r["sector"], r["sector_pnl"]) for r in rows}, key=lambda s: s[1])
     result = {
         "spot_shock_pct": spot_pct,
