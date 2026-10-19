@@ -6,7 +6,7 @@
 # ///
 """Mark the whole book with one ChalkSQL query and publish the marks to the app.
 
-    PRICER_TOKEN=... ./batch.py --env-id <environment> --pricer https://<pricer> --data data/
+    PRICER_TOKEN=... ./batch.py
 
 sql/mark_book.sql prices every position through function.option-mc-price (the GPU) and stores
 price, standard error and Greeks as data/book_marked.parquet, which stress tests compare against.
@@ -16,7 +16,6 @@ the engine caches read_parquet results by URL.
 
 from __future__ import annotations
 
-import argparse
 import hashlib
 import subprocess
 import time
@@ -24,16 +23,15 @@ from pathlib import Path
 
 import httpx
 import pyarrow.parquet as pq
-from chalk_env import load_chalk_env
 from chalk_sql import run_sql
 
 HERE = Path(__file__).resolve().parent
 
 
-def publish(data: Path, env_id: str, pricer: str, app: str, name: str) -> str:
+def publish(data: Path, app: str, name: str) -> str:
     """Upload data/, redeploy the app, and return the file's versioned URL once the app serves it."""
     subprocess.run(
-        [str(HERE / "deploy_app.py"), "--env-id", env_id, "--pricer", pricer, "--upload", str(data)], check=True
+        [str(HERE / "deploy_app.py"), "--upload", str(data)], check=True
     )
     digest = hashlib.md5((data / name).read_bytes()).hexdigest()
     url = f"{app}/data/{name}"
@@ -47,19 +45,15 @@ def publish(data: Path, env_id: str, pricer: str, app: str, name: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--env-id", required=True)
-    parser.add_argument("--pricer", required=True)
-    parser.add_argument("--data", type=Path, default=Path("data"))
-    args = parser.parse_args()
-    load_chalk_env(args.env_id)
-    app = f"https://{args.env_id}-options-monte-carlo.staging.internal.gcp.chalk.dev"
+    from chalkcompute import ScalingGroup
 
-    book_url = publish(args.data, args.env_id, args.pricer, app, "book.parquet")
+    app = ScalingGroup.from_name("options-monte-carlo").web_url
+
+    book_url = publish(HERE / "data", app, "book.parquet")
     marked, seconds = run_sql((HERE / "sql/mark_book.sql").read_text().replace("{book}", book_url))
     print(f"marked {marked.num_rows} positions in {seconds:.1f}s", flush=True)
-    pq.write_table(marked, args.data / "book_marked.parquet")
-    publish(args.data, args.env_id, args.pricer, app, "book_marked.parquet")
+    pq.write_table(marked, HERE / "data" / "book_marked.parquet")
+    publish(HERE / "data", app, "book_marked.parquet")
 
 
 if __name__ == "__main__":

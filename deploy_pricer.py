@@ -6,7 +6,7 @@
 # ///
 """Deploy the Monte Carlo pricer (pricer/) as a GPU ScalingGroup.
 
-    PRICER_TOKEN=... ./deploy_pricer.py --env-id <environment> [--gpu nvidia-l4]
+    PRICER_TOKEN=... ./deploy_pricer.py
 
 The Chalk function in deploy_functions.py calls it, so ChalkSQL and chalkdf price options with
 catalog_call; the app calls it directly for the single-option explorer.
@@ -14,23 +14,15 @@ catalog_call; the app calls it directly for the single-option explorer.
 
 from __future__ import annotations
 
-import argparse
 import os
 import time
 from pathlib import Path
 
-from chalk_env import load_chalk_env
 
 HERE = Path(__file__).resolve().parent
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--name", default="option-pricer")
-    parser.add_argument("--env-id", default=None)
-    parser.add_argument("--gpu", default="nvidia-l4")
-    args = parser.parse_args()
-    load_chalk_env(args.env_id)
     from chalkcompute import Image, ReadinessProbe, ScalingGroup
 
     image = (
@@ -43,8 +35,8 @@ def main() -> None:
     )
     group = ScalingGroup(
         image=image,
-        name=args.name,
-        gpu=args.gpu,
+        name='option-pricer',
+        gpu='nvidia-l4',
         cpu="4",
         memory="16Gi",
         env={"PORT": "8080", "CPU_THREADS": "4", "PRICER_TOKEN": os.environ.get("PRICER_TOKEN", "")},
